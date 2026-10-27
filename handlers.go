@@ -2766,14 +2766,15 @@ func (s *server) SetStatusMessage() http.HandlerFunc {
 // Sends a regular text message
 func (s *server) SendMessage() http.HandlerFunc {
 	type textStruct struct {
-		Phone         string
-		Body          string
-		LinkPreview   bool
-		Id            string
-		ContextInfo   waE2E.ContextInfo
-		MentionAll    bool
-		QuotedText    string         `json:"QuotedText,omitempty"`
-		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
+		Phone            string
+		Body             string
+		LinkPreview      bool
+		LinkPreviewImage string
+		Id               string
+		ContextInfo      waE2E.ContextInfo
+		MentionAll       bool
+		QuotedText       string         `json:"QuotedText,omitempty"`
+		QuotedMessage    *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		txtid := r.Context().Value("userinfo").(Values).Get("Id")
@@ -2813,11 +2814,26 @@ func (s *server) SendMessage() http.HandlerFunc {
 			url string
 			og  openGraphResult
 		)
-		if t.LinkPreview {
+		if t.LinkPreview || t.LinkPreviewImage != "" {
 			url = extractFirstURL(t.Body)
 			if url != "" {
 				og = getOpenGraphData(r.Context(), url, txtid)
 			}
+		}
+		if t.LinkPreviewImage != "" {
+			if url == "" {
+				s.Respond(w, r, http.StatusBadRequest, errors.New("missing URL in Body for LinkPreviewImage"))
+				return
+			}
+			if err := applyLinkPreviewImage(r.Context(), t.LinkPreviewImage, &og); err != nil {
+				s.Respond(w, r, http.StatusBadRequest, err)
+				return
+			}
+		}
+		// A preview card needs a title; fall back to the host when the page has
+		// no metadata (common with custom images and JS-only pages).
+		if og.Title == "" && url != "" {
+			og.Title = previewTitleFallback(url)
 		}
 		msg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{

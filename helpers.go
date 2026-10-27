@@ -8,6 +8,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -40,6 +41,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/nfnt/resize"
 	"github.com/rs/zerolog/log"
+	"github.com/vincent-petithory/dataurl"
 )
 
 const (
@@ -876,15 +878,81 @@ func fetchOpenGraphImage(ctx context.Context, pageURL *url.URL, imageURLStr stri
 		return
 	}
 
+	setOpenGraphThumbnails(result, img)
+}
+
+// setOpenGraphThumbnails fills the small inline and large uploaded thumbnails
+// from a decoded image. The inline one is derived from the 600px version so a
+// 4000px original is only resized once.
+func setOpenGraphThumbnails(result *openGraphResult, img image.Image) {
 	hqThumb := resize.Thumbnail(openGraphHQThumbnailDim, openGraphHQThumbnailDim, img, resize.Lanczos3)
 	result.HQImageData = encodeJPEGThumbnail(hqThumb)
 	bounds := hqThumb.Bounds()
 	result.HQWidth = uint32(bounds.Dx())
 	result.HQHeight = uint32(bounds.Dy())
-
-	// Downscale the inline thumbnail from hqThumb (max 600px) instead of
-	// resizing the original image (up to 4000px) a second time.
 	result.ImageData = encodeJPEGThumbnail(resize.Thumbnail(openGraphThumbnailWidth, openGraphThumbnailHeight, hqThumb, resize.Lanczos3))
+}
+
+// previewTitleFallback gives the preview card a title when the page has no
+// Open Graph/title metadata, so clients still render the card.
+func previewTitleFallback(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err == nil && parsed.Host != "" {
+		return parsed.Host
+	}
+	return rawURL
+}
+
+// linkPreviewImageSource normalizes the accepted forms: an http(s) URL, a
+// data:image URI, or bare base64 image data (which gets wrapped in a data URI).
+func linkPreviewImageSource(source string) (string, error) {
+	source = strings.TrimSpace(source)
+	if isHTTPURL(source) || strings.HasPrefix(source, "data:image") {
+		return source, nil
+	}
+	if int64(len(source)) > int64(base64.StdEncoding.EncodedLen(int(openGraphImageMaxBytes))) {
+		return "", fmt.Errorf("LinkPreviewImage exceeds %d bytes", openGraphImageMaxBytes)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(source)
+	if err != nil {
+		return "", fmt.Errorf("LinkPreviewImage must be an http(s) URL, a data:image URI, or base64 image data")
+	}
+	mimeType := http.DetectContentType(decoded)
+	if !strings.HasPrefix(mimeType, "image/") {
+		return "", fmt.Errorf("LinkPreviewImage base64 is not a supported image")
+	}
+	return dataurl.New(decoded, mimeType).String(), nil
+}
+
+// applyLinkPreviewImage overrides the scraped Open Graph image with a caller
+// supplied http(s) URL, data:image URI, or bare base64 image data. It returns an
+// error so the caller can reject bad input instead of silently sending a
+// different preview.
+func applyLinkPreviewImage(ctx context.Context, source string, result *openGraphResult) error {
+	source, err := linkPreviewImageSource(source)
+	if err != nil {
+		return err
+	}
+	media, err := readOutgoingMedia(ctx, source, openGraphImageMaxBytes)
+	if err != nil {
+		return fmt.Errorf("could not fetch LinkPreviewImage: %w", err)
+	}
+	defer media.Close()
+	file, err := media.Open()
+	if err != nil {
+		return fmt.Errorf("could not open LinkPreviewImage: %w", err)
+	}
+	defer file.Close()
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return fmt.Errorf("could not decode LinkPreviewImage: %w", err)
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() > openGraphMaxImageDim || bounds.Dy() > openGraphMaxImageDim {
+		return fmt.Errorf("LinkPreviewImage exceeds %dpx", openGraphMaxImageDim)
+	}
+	setOpenGraphThumbnails(result, img)
+	return nil
 }
 
 func buildStickerMetadata(packID, packName, packPublisher string, emojis []string) map[string]interface{} {

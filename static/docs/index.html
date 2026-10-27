@@ -790,6 +790,16 @@
                             <td>Text message content</td>
                         </tr>
                         <tr>
+                            <td>LinkPreview</td>
+                            <td>boolean</td>
+                            <td>Enables link preview generation from the first URL in Body. Default false</td>
+                        </tr>
+                        <tr>
+                            <td>LinkPreviewImage</td>
+                            <td>string</td>
+                            <td>Optional custom preview image as an http(s) URL, data:image URI, or bare base64 image data. Overrides the page's og:image. Body must contain a URL. Page metadata is fetched automatically</td>
+                        </tr>
+                        <tr>
                             <td>Id</td>
                             <td>string</td>
                             <td>Custom ID for the message. If not provided, a random ID will be generated</td>
@@ -812,6 +822,14 @@
     "Participant": "5491155553935@s.whatsapp.net"
   }
 }</code></pre>
+
+                <h4>Request Example (custom link preview image):</h4>
+                <pre><code class="language-json">{
+  "Phone": "5491155553935",
+  "Body": "Confira: https://example.com",
+  "LinkPreviewImage": "https://example.com/banner.jpg"
+}</code></pre>
+                <p>Use a public http(s) image URL, a <code>data:image/...;base64,...</code> URI, or bare base64 image data. It overrides the page's og:image and is resized to fit 600 px on the longest side. The page title and description are fetched automatically; <code>"LinkPreview": true</code> is not required.</p>
                 
                 <h4>Response:</h4>
                 <pre><code class="language-json">{

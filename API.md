@@ -990,6 +990,21 @@ Example sending a new message with link preview
 curl -X POST -H 'Token: 1234ABCD' -H 'Content-Type: application/json' --data '{"Phone":"5491155554444","Body":"Check my site? https://example.com", "Id": "90B2F8B13FAC8A9CF6B06E99C7834DC5","LinkPreview": true}' http://localhost:8080/chat/send/text
 ```
 
+Example sending a link preview with a custom image
+```
+curl -X POST -H 'Token: 1234ABCD' -H 'Content-Type: application/json' --data '{"Phone":"5491155554444","Body":"Check my site? https://example.com","LinkPreviewImage":"https://example.com/banner.jpg"}' http://localhost:8080/chat/send/text
+```
+
+`LinkPreviewImage` accepts a public http(s) image URL, a data URI
+(`data:image/png;base64,...`), or bare base64 image data and overrides the image
+scraped from the page's Open Graph tags. The text must still contain a URL. Page
+title and description are fetched automatically, so `LinkPreview` is not
+required when `LinkPreviewImage` is set. The server downloads up to 10 MB, rejects images
+larger than 4000 px on a side, and resizes proportionally to fit 600 px on the
+longest side (JPEG quality 80). Invalid or unreachable images return 400 so the
+message is not sent with an unexpected preview. Supported formats are the ones
+Go decodes by default: JPEG, PNG, GIF and WebP (AVIF is not supported).
+
 Example replying to some message:
 
 ```

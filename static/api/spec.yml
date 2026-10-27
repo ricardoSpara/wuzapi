@@ -3980,6 +3980,10 @@ definitions:
         type: boolean
         description: "Set to true to enable link preview generation (default is false)"
         example: true
+      LinkPreviewImage:
+        type: string
+        description: "Custom preview image: an http(s) URL, data:image URI, or bare base64 image data. Overrides the page's og:image. The Body must contain a URL. Page metadata is fetched automatically; LinkPreview is not required. Images are resized to fit 600px on the longest side."
+        example: "https://example.com/banner.jpg"
       Id:
         type: string
         example: "ABCDABCD1234"
